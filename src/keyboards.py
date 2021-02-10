@@ -1,0 +1,135 @@
+#-*- coding: utf-8 -*-
+
+import abc 
+import enum, logging
+from emoji import emojize
+
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ReplyKeyboardMarkup, 
+    ReplyKeyboardRemove
+)
+
+
+class ButtonText(enum.Enum):
+    NEW_RECIPE = emojize(":heavy_plus_sign: Nuova", use_aliases=True)
+    VIEW_RECIPES = emojize(":book: Lista", use_aliases=True)
+    HELP = emojize(":sos: Aiuto", use_aliases=True)
+
+    END_RECIPE = emojize(":ok: Salva!! :ok:", use_aliases=True)
+    CANCEL_NEW_RECIPE = emojize(":a::b::o2:RT", use_aliases=True)
+
+
+class VizKeyboard:
+    def __init__(self, global_kb: bool = False):
+        self.__all_keys = {
+            "prev": ":arrow_left: Prev", 
+            "next": ":arrow_right: Next", 
+            "see": "Vedi ricetta", 
+            "see_back": "Lista ingredienti",
+            "edit": "Modifica", 
+            "edit_back": "Premimi!!",
+            "bookmarks": ":pushpin: Salva!", 
+            "bookmarks_back": "Dimentica",
+            "end": ":x: Chiudi!!"
+        }
+
+        self.__move_status = [True, True]
+        self.__move_keys = ["prev", "next"]
+        self.__actions = ["see", "bookmarks" if global_kb else "edit"]
+        self.__close_key = ["end"]
+
+
+    def do_action(self, input_action: str):
+        """ Update the keyboard's status given the last pressed key """
+        if self.__get_key_list(input_action) is self.__actions:
+            #get the current base action
+            base_action = input_action.partition("_")[0]
+            #get the inverse key of @input_action
+            new_key = base_action if input_action.endswith("_back") \
+                                  else f"{base_action}_back"
+            #effective key replacement
+            self.__actions[self.__actions.index(input_action)] = new_key
+        
+        return self 
+
+
+    def update(self, curr_pos: int, max_pos: int):
+        """Update keyboard status given the current recipe position @curr_pos
+        and the maximum position value @max_pos """
+
+        #if there is just one recipe, disable both prev and next buttons 
+        if curr_pos == max_pos == 1:
+            self.__move_status = [False, False]
+        else:
+            #enable all the keys by default  
+            self.__move_status = [True, True]
+            #if the last recipe is pointed, disable the next button 
+            if curr_pos == max_pos:
+                self.__move_status[1] = False
+            #if the first recipe is pointed, disable the prev button 
+            elif curr_pos == 1:
+                self.__move_status[0] = False 
+        
+        return self
+
+    def get_kb(self):
+        """Return an InlineKeyboardMarkup representing the actual state of @self"""
+        move = [k for k, s in zip(self.__move_keys, self.__move_status) if s]
+        move = self.__get_inline_keys(move)
+        actions = self.__get_inline_keys(self.__actions)
+        close = self.__get_inline_keys(self.__close_key)
+
+        return InlineKeyboardMarkup([move, actions, close])
+
+
+    def __get_inline_keys(self, key_list: list):
+        """ Return a list of InlineKeyboardButtons given a list of string @key_list"""
+        return [
+            InlineKeyboardButton(emojize(
+                self.__all_keys[key], use_aliases=True), callback_data=key) \
+                    for key in key_list
+        ]
+
+    def __get_key_list(self, key: str):
+        """ Return the attribute list containing the key named as @key """
+        if key in ("prev", "next"):
+            return self.__move_keys
+        elif key in ("see", "edit", "bookmarks") or key.endswith("_back"):
+            return self.__actions
+
+
+    
+
+
+
+
+
+def main_keyboard(one_time_keyboard: bool):
+    return ReplyKeyboardMarkup([
+        [ButtonText.NEW_RECIPE.value, ButtonText.VIEW_RECIPES.value, ButtonText.HELP.value]], 
+        one_time_keyboard = one_time_keyboard, 
+        resize_keyboard = True
+    )
+
+def end_recipe_keyboard(one_time_keyboard: bool = False, button_list: bool = False, blist: list = None):
+    if blist is None:
+        blist = [[ButtonText.END_RECIPE.value, ButtonText.CANCEL_NEW_RECIPE.value]]
+        if button_list:
+            return blist 
+
+    return ReplyKeyboardMarkup(blist, one_time_keyboard=one_time_keyboard, resize_keyboard = True)
+
+def save_recipe_keyboard():
+    return InlineKeyboardMarkup([[
+            InlineKeyboardButton("Sìììì", callback_data="1"), 
+            InlineKeyboardButton("Noope", callback_data="0")
+    ]])
+
+def view_recipes_which():
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("Tutte!!", callback_data="all"), 
+        InlineKeyboardButton("Solo le mie!", callback_data="mine")
+    ]])
+
