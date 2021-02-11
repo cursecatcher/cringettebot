@@ -44,9 +44,7 @@ class ChatOperation(enum.Enum):
 
 
 
-def start(update: Update, context: CallbackContext) -> ChatOperation: 
-    reply_keyboard = kb.main_keyboard(one_time_keyboard = False)
-    
+def start(update: Update, context: CallbackContext) -> ChatOperation:     
     update.message.reply_text(emojize(
         f"Ciao, {update.message.from_user.first_name}!\n"
         "Cringette è il bot che ti aiuterà a tenere a portata di tap le tue ricette di cucina! :yum:\n"
@@ -56,7 +54,7 @@ def start(update: Update, context: CallbackContext) -> ChatOperation:
         "Tappa su /help per visualizzare i comandi supportati!\n\n"
         "Che vuoi fare?", use_aliases=True),
         parse_mode=ParseMode.HTML,
-        reply_markup = reply_keyboard
+        reply_markup = kb.MainKeyboard().main().get_kb()
     )
 
     logger.info(f"User {update.message.from_user.first_name} presses {update.message.text}")
@@ -78,11 +76,10 @@ def entrypoint(update: Update, context: CallbackContext) -> ChatOperation:
 def add_recipe(update: Update, context: CallbackContext) -> ChatOperation: 
     user = update.message.from_user
     logger.info(f"User {user.first_name} is adding a new recipe")
-    keyboard = kb.end_recipe_keyboard(button_list=True)
-    del keyboard[0][0]
-    keyboard = kb.end_recipe_keyboard(blist = keyboard)
 
-    update.message.reply_text("Molto bene! Come si chiama la ricetta?", reply_markup = keyboard)
+    keyboard = kb.MainKeyboard().add_recipe_mode()
+
+    update.message.reply_text("Molto bene! Come si chiama la ricetta?", reply_markup = keyboard.get_kb())
     return ChatOperation.ADD_INGREDIENT
 
 def add_ingredient(update: Update, context: CallbackContext) -> ChatOperation: 
@@ -120,8 +117,6 @@ def add_ingredient(update: Update, context: CallbackContext) -> ChatOperation:
 
     n_ingredients = len(user_recipe.recipe.ingredients)
 
-    keyboard = kb.end_recipe_keyboard(one_time_keyboard = True)
-
     if n_ingredients == 0: 
         update.message.reply_text(
             "Sono pronto! Inviami la lista degli ingredienti!\n\n"
@@ -129,7 +124,7 @@ def add_ingredient(update: Update, context: CallbackContext) -> ChatOperation:
             "NB. Puoi inviarmi un ingrediente alla volta, "
             "o se preferisci puoi scrivere più ingredienti in un unico messaggio, "
             "separandoli con delle virgole e/o con delle andate a capo!\n", 
-            reply_markup = keyboard
+            reply_markup = user_recipe.keyboard.get_kb()
         )
 
     return ChatOperation.ADD_INGREDIENT
@@ -139,13 +134,14 @@ def end_recipe(update: Update, context: CallbackContext) -> int:
     user = update.message.from_user
     user_recipe = context.user_data[utils.OpBot.ADD_RECIPE]
     text_message = update.message.text
+    keyboard = user_recipe.keyboard
 
     if not user_recipe.recipe.ingredients:
         #back to add ingredient operation 
         update.message.reply_text(
             "Zio, non hai scritto gli ingredienti!!\n"
             "Non sono ammesse ricette respiriane, quindi scrivili o vai a fare in culo.", 
-            reply_markup = kb.end_recipe_keyboard(one_time_keyboard = True)
+            reply_markup = keyboard.add_ingredient_mode().get_kb()
         )
         return ChatOperation.ADD_INGREDIENT
     
@@ -154,12 +150,10 @@ def end_recipe(update: Update, context: CallbackContext) -> int:
 
     elif text_message == ButtonText.END_RECIPE.value and not user_recipe.recipe_method: 
         #send recipe description request
-        keyboard = kb.end_recipe_keyboard(button_list=True)
-        del keyboard[0][0]
         update.message.reply_text(
             f"{user.first_name}, ci siamo quasi!\n"
             "Inviami il procedimento per cucinare questa deliziosa ricetta!", 
-            reply_markup = kb.end_recipe_keyboard(one_time_keyboard=True, blist=keyboard)
+            reply_markup = keyboard.add_recipe_mode().get_kb()
         )
         return ChatOperation.INSERT_RECIPE
 
@@ -171,7 +165,8 @@ def end_recipe(update: Update, context: CallbackContext) -> int:
         user_recipe.recipe.id = main_manager.add_recipe(user_recipe.recipe, user_recipe.recipe_method)
 
         update.message.reply_text(f"Oppalà! Ho salvato la tua ricetta nel db!", 
-            reply_markup = kb.main_keyboard(one_time_keyboard=False))
+            reply_markup = keyboard.main().get_kb())
+#            reply_markup = kb.main_keyboard(one_time_keyboard=False))
         logger.info(f"User {user.id} ({user.first_name}) saved recipe {user_recipe.recipe.name} ({user_recipe.recipe.ingredients})")
 
         update.message.reply_text(
@@ -322,7 +317,7 @@ def helper(update: Update, context: CallbackContext) -> ChatOperation:
         "• /cancel - annulla il comando in corso\n"
         "\nAltre funzionalità sono in via di sviluppo! :smile:", use_aliases=True), 
         parse_mode=ParseMode.HTML,
-        reply_markup = kb.main_keyboard(one_time_keyboard=False), 
+        reply_markup = kb.MainKeyboard().main().get_kb()
     )
     #NB. currently the helper removes the current action 
     context.user_data.clear() 
@@ -335,7 +330,7 @@ def cancel(update: Update, context: CallbackContext) -> int:
 
     update.message.reply_text(
         "L'operazione corrente è stata annullata. Cosa vuoi fare ora?",
-        reply_markup=kb.main_keyboard(one_time_keyboard=False)
+        reply_markup = kb.MainKeyboard().main().get_kb()
     )
 
     context.user_data.clear() 

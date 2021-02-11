@@ -3,7 +3,7 @@
 import enum, logging
 from db.managers import PersistencyManager
 
-from keyboards import VizKeyboard
+import keyboards
 
 class OpBot(enum.Enum):
     ADD_RECIPE = "add"
@@ -32,12 +32,18 @@ class RecipeInsertionOperation:
         #adding this object to context.user_data 
         if OpBot.ADD_RECIPE not in user_data:
             user_data[OpBot.ADD_RECIPE] = self
+            #init keyboard state 
+            self.__keyboard = keyboards.MainKeyboard()
         else:
             raise RuntimeError("RecipeInsertionOperation object already present in user_data.")
     
     @property
     def recipe(self):
         return self.__recipe
+
+    @property
+    def keyboard(self):
+        return self.__keyboard
 
     @property
     def recipe_method(self):
@@ -107,7 +113,7 @@ class RecipeViz:
         self.__cache = [None for elem in self.__recList]
 
         #init keyboard state 
-        self.__keyboard = VizKeyboard(global_kb=is_global_search)
+        self.__keyboard = keyboards.VizKeyboard(global_kb=is_global_search)
         self.__keyboard.update(self.recipe_position, self.num_recipes)
         
     

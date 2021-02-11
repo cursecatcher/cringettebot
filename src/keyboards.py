@@ -122,26 +122,38 @@ class VizKeyboard:
             return self.__actions
 
 
+
+class MainKeyboard:
+    def __init__(self):
+        self.__all_keys = {
+            "new": ButtonText.NEW_RECIPE.value, 
+            "view": ButtonText.VIEW_RECIPES.value, 
+            "help": ButtonText.HELP.value, 
+            "end": ButtonText.END_RECIPE.value, 
+            "cancel": ButtonText.CANCEL_NEW_RECIPE.value
+        }
+
+        self.__keys = ["end", "cancel"]
+
+    def main(self):
+        """ Reset keyboard to the main one """
+
+        self.__keys = ["new", "view", "help"]
+        return self 
+    
+    def add_ingredient_mode(self):
+        self.__keys = ["end", "cancel"]
+        return self 
+    
+    def add_recipe_mode(self):
+        self.__keys = ["cancel"]
+        return self 
+
+    def get_kb(self, one_time_keyboard = False):
+        keys = [self.__all_keys[key_str] for key_str in self.__keys]
+        return ReplyKeyboardMarkup([keys], one_time_keyboard=one_time_keyboard, resize_keyboard=True)
     
 
-
-
-
-
-def main_keyboard(one_time_keyboard: bool):
-    return ReplyKeyboardMarkup([
-        [ButtonText.NEW_RECIPE.value, ButtonText.VIEW_RECIPES.value, ButtonText.HELP.value]], 
-        one_time_keyboard = one_time_keyboard, 
-        resize_keyboard = True
-    )
-
-def end_recipe_keyboard(one_time_keyboard: bool = False, button_list: bool = False, blist: list = None):
-    if blist is None:
-        blist = [[ButtonText.END_RECIPE.value, ButtonText.CANCEL_NEW_RECIPE.value]]
-        if button_list:
-            return blist 
-
-    return ReplyKeyboardMarkup(blist, one_time_keyboard=one_time_keyboard, resize_keyboard = True)
 
 def save_recipe_keyboard():
     return InlineKeyboardMarkup([[
