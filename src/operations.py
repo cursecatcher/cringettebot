@@ -195,21 +195,27 @@ def add_photo(update: Update, context: CallbackContext) -> ChatOperation:
 def set_privacy(update: Update, context: CallbackContext) -> ChatOperation:
     query = update.callback_query
     query.answer() 
-    response = bool(int(query.data))
-
-    user_recipe = context.user_data[utils.OpBot.ADD_RECIPE]
-
     db_manager = context.bot_data["manager"].db_manager
-    db_manager.set_recipe_privacy(user_recipe.recipe.id, response)
 
-    message = "Grande spirito di condivisione, complimenti!!" if response else \
-              "Ok, tieniti pure i tuoi segreti!"
+    try:
+        response = bool(int(query.data))
+        user_recipe = context.user_data[utils.OpBot.ADD_RECIPE]
 
-    query.edit_message_text(message)
+        db_manager.set_recipe_privacy(user_recipe.recipe.id, response)
 
-    context.user_data.clear() 
+        message = "Grande spirito di condivisione, complimenti!!" if response else \
+                "Ok, tieniti pure i tuoi segreti!"
 
-    return ChatOperation.ENTRYPOINT
+        query.edit_message_text(message)
+        context.user_data.clear() 
+
+        return ChatOperation.ENTRYPOINT
+
+    except ValueError:
+        recipe_id = context.user_data[utils.OpBot.VIEW_RECIPES].recipe_id
+        logging.info(f"Toggling privacy of recipe #{recipe_id}")
+
+        return db_manager.toggle_privacy(query.from_user.id, recipe_id)
 
 
 def view_recipes(update: Update, context: CallbackContext) -> ChatOperation:
@@ -227,7 +233,7 @@ def get_recipe(update: Update, context: CallbackContext) -> None:
     query.answer()
     response = query.data
     user = query.from_user 
-    db_manager = context.bot_data["manager"].db_manager
+    data_manager = context.bot_data["manager"]
 
     if response == "end":
         query.edit_message_text("Cya!")
@@ -238,7 +244,7 @@ def get_recipe(update: Update, context: CallbackContext) -> None:
         if response not in ("all", "mine"):
             raise Exception(f"Unvalid response: {response}")
 
-        context.user_data[utils.OpBot.VIEW_RECIPES] = utils.RecipeViz(db_manager, user.id, response == "mine")
+        context.user_data[utils.OpBot.VIEW_RECIPES] = utils.RecipeViz(data_manager, user.id, response == "mine")
         logging.info(f"RecipeViz({user.id}, {response == 'mine'}) initialized")
 
     viz = context.user_data[utils.OpBot.VIEW_RECIPES]
@@ -248,14 +254,19 @@ def get_recipe(update: Update, context: CallbackContext) -> None:
         del context.user_data[utils.OpBot.VIEW_RECIPES]
         return ChatOperation.ENTRYPOINT
 
-    if response.endswith("_back") or response in ("see", "edit", "bookmarks"):
+    if response.endswith("_back") or response in ("see", "edit", "bookmarks", "delete", "privacy"):
         actual_action, _, inverse_action = response.partition("_")
+        #just a default message which will be removed sooner or later ... 
         message = """Questa funzionalità non è inclusa nella versione free.
 Mandami 10€ in bitcoin e te la abilito (scherzo, ci sto lavorando! :see_no_evil:)"""
 
         if actual_action == "see":
-            message = context.bot_data["manager"].fs_manager.get_procedure(viz.get()) \
-                if not inverse_action else viz.get(format=True)
+            if inverse_action: #get ingredients 
+                message = viz.get(format=True) #ridondanteeee
+            else:
+                curr_recipe = viz.get()
+                recipe_message = data_manager.fs_manager.get_procedure(curr_recipe)
+                message = f"Procedimento per <b>{curr_recipe.name}</b>\n\n{recipe_message}"
                 
         elif actual_action == "edit":
             if inverse_action:
@@ -265,6 +276,18 @@ Mandami 10€ in bitcoin e te la abilito (scherzo, ci sto lavorando! :see_no_evi
             if inverse_action:
                 message = viz.get(format=True)
         
+        elif actual_action == "delete":
+            viz.delete_recipe()
+        
+        elif actual_action == "privacy":
+            new_privacy = set_privacy(update, context)
+
+            if new_privacy is not None: 
+                new_privacy = "pubblica" if new_privacy else "privata"
+                message = f"Fatto! La ricetta <b>{viz.get().name}</b> è ora {new_privacy}!"
+            else:
+                message = "Qualcosa è andato storto. Segnala il bug al mio creatore @Cursecatcher, plz."
+             
         viz.do_action(response)
         query.edit_message_text(
             emojize(message, use_aliases=True), 

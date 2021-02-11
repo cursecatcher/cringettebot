@@ -1,4 +1,5 @@
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
 from sqlalchemy import (
     Boolean,
     Column, 
@@ -48,6 +49,8 @@ class Recipe(Base):
 
     UniqueConstraint(owner, name)
 
+    ingredients = relationship("IngredientsRecipe", cascade="all,delete", backref="recipe")
+
 
     def __repr__(self):
         return f"<Recipe(id={self.id}, name='{self.name}', owner={self.owner}, public={self.public_flag})>"
@@ -60,7 +63,6 @@ class IngredientsRecipe(Base):
     ingredientID = Column(Integer, ForeignKey("Ingredient.id"), nullable=False)
     quantity = Column(String)
     PrimaryKeyConstraint(recipeID, ingredientID)
-
 
     def __repr__(self):
         return f"<IngredientRecipe(id_rec={self.recipeID}, id_ingr={self.ingredientID})>"

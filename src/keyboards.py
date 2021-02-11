@@ -24,22 +24,44 @@ class ButtonText(enum.Enum):
 class VizKeyboard:
     def __init__(self, global_kb: bool = False):
         self.__all_keys = {
-            "prev": ":arrow_left: Prev", 
-            "next": ":arrow_right: Next", 
-            "see": "Vedi ricetta", 
-            "see_back": "Lista ingredienti",
-            "edit": "Modifica", 
-            "edit_back": "Premimi!!",
+            #actions
             "bookmarks": ":pushpin: Salva!", 
             "bookmarks_back": "Dimentica",
+            "edit": "Modifica", 
+            "edit_back": "???", 
+#            "delete": "Elimina",
+#            "delete_back": "Premimi!!",
+            "privacy": "Privacy",
+            "see": "Ricetta", 
+            "see_back": "Ingredienti",
+            #move actions
+            "prev": ":arrow_left: Prev", 
+            "next": ":arrow_right: Next", 
+            #close kb 
             "end": ":x: Chiudi!!"
         }
 
         self.__move_status = [True, True]
         self.__move_keys = ["prev", "next"]
-        self.__actions = ["see", "bookmarks" if global_kb else "edit"]
+        self.__actions = ["see"]
+        #define commands for global and local search
+        if global_kb:
+            specific_commands = ["bookmarks"]
+        else:
+            specific_commands = [
+#                "edit", 
+                "privacy"
+            ]
+        self.__actions.extend(specific_commands)
         self.__close_key = ["end"]
 
+    def reset(self):
+        """ Reset action keys in the keyboard """
+        self.__actions = [
+            action.rstrip("_back") if action.endswith("_back") 
+                else action
+                    for action in self.__actions
+        ]
 
     def do_action(self, input_action: str):
         """ Update the keyboard's status given the last pressed key """

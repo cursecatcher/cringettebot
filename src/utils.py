@@ -1,7 +1,7 @@
 #-*- coding: utf-8 -*-
 
 import enum, logging
-from db.managers import DBManager
+from db.managers import PersistencyManager
 
 from keyboards import VizKeyboard
 
@@ -89,21 +89,26 @@ class RecipeInsertionOperation:
 
 
 class RecipeViz:
-    def __init__(self, db_manager: DBManager, user_id: int, only_personal_rec: bool = True):
-        self.__dbm = db_manager
+    def __init__(self, data_manager: PersistencyManager, user_id: int, only_personal_rec: bool = True):
+        self.__data_manager = data_manager  
         self.__user_id = user_id
         self.__personal_flag = only_personal_rec
+        is_global_search = not only_personal_rec
 
         self.__recList = list()
         self.__cache = list() 
         self.__index = 0
 
-        is_global_search = not only_personal_rec
-        self.__recList = self.__dbm.get_recipes(user_id, id_only=True, all_recipes=is_global_search)
+        self.__recList = self.__data_manager.db_manager.get_recipes(
+            user_id, 
+            id_only=True, 
+            all_recipes=is_global_search
+        )
         self.__cache = [None for elem in self.__recList]
 
         #init keyboard state 
-        self.__keyboard = VizKeyboard(global_kb=is_global_search).update(self.recipe_position, self.num_recipes)
+        self.__keyboard = VizKeyboard(global_kb=is_global_search)
+        self.__keyboard.update(self.recipe_position, self.num_recipes)
         
     
     @property
@@ -132,19 +137,22 @@ class RecipeViz:
         elem = self.__cache[index]        
 
         if elem is None:
-            elem = self.__dbm.get_recipe_by_id(self.__recList[index])
+            elem = self.__data_manager.db_manager.get_recipe_by_id(self.__recList[index])
             self.__cache[index] = elem
 
         message = elem 
 
         if format:
-            ingredients = [i.name for i in elem.ingredients]
-            ingredients = "\n".join(ingredients)
+            ingredients = sorted([i.name.capitalize() for i in elem.ingredients])
+            ingredients = "\n• ".join(ingredients)
             message = f""" 
-Ricetta {self.recipe_position}/{self.num_recipes}: <b>{elem.name}</b>
+<b>{elem.name.capitalize()}</b>
 
 Ingredienti:
-{ingredients}"""
+• {ingredients}
+
+Ricetta {self.recipe_position}/{self.num_recipes}
+"""
 
         return message 
         
@@ -157,6 +165,7 @@ Ingredienti:
             ret = self.__index != len(self.__recList) - 1
 
         self.__keyboard.update(self.recipe_position, self.num_recipes)
+        self.__keyboard.reset()
         return ret
 
     def prev(self):
@@ -167,7 +176,14 @@ Ingredienti:
             ret = self.__index != 0
         
         self.__keyboard.update(self.recipe_position, self.num_recipes)
+        self.__keyboard.reset()
         return ret 
     
     def do_action(self, action: str):
         self.__keyboard.do_action(action)
+
+    def delete_recipe(self):
+        """ Delete from the database the current recipe and update the viz state """
+
+        recipe_id = self.__recList[self.__index]
+        pass 
