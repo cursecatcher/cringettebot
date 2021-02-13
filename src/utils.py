@@ -137,6 +137,46 @@ class RecipeViz:
     @property
     def recipe_id(self):
         return self.__recList[self.__index]
+        
+    def next(self):
+        ret = False
+
+        if self.__index < len(self.__recList) - 1:
+            self.__index += 1 #update pointer 
+            ret = self.__index != len(self.__recList) - 1
+
+        self.__keyboard.update(self.recipe_position, self.num_recipes)
+        self.__keyboard.reset()
+        return ret
+
+    def prev(self):
+        ret = False
+
+        if self.__index > 0:
+            self.__index -= 1 #update pointer 
+            ret = self.__index != 0
+        
+        self.__keyboard.update(self.recipe_position, self.num_recipes)
+        self.__keyboard.reset()
+        return ret 
+    
+    def do_action(self, action: str):
+        self.__keyboard.do_action(action)
+
+    def delete_recipe(self):
+        """ Delete from the database the current recipe and update the viz state """
+
+        recipe_id = self.__recList[self.__index]
+
+        logging.info(f"Trying to delete recipe #{recipe_id} owned by user {self.__user_id}")
+
+        #remove the recipe from local buffers if the it has been correctly removed from db
+        if self.__data_manager.delete_recipe(user_id = self.__user_id, recipe_id = recipe_id):
+            del self.__recList[self.__index]
+            del self.__cache[self.__index]
+
+            logging.info(f"Recipe #{recipe_id} owned by user {self.__user_id} successfully deleted.")
+
 
     def get(self, format: bool = False):
         index = self.__index
@@ -157,39 +197,6 @@ class RecipeViz:
 Ingredienti:
 • {ingredients}
 
-Ricetta {self.recipe_position}/{self.num_recipes}
-"""
+Ricetta {self.recipe_position}/{self.num_recipes}"""
 
         return message 
-        
-
-    def next(self):
-        ret = False
-
-        if self.__index < len(self.__recList) - 1:
-            self.__index += 1 #increment pointer 
-            ret = self.__index != len(self.__recList) - 1
-
-        self.__keyboard.update(self.recipe_position, self.num_recipes)
-        self.__keyboard.reset()
-        return ret
-
-    def prev(self):
-        ret = False
-
-        if self.__index > 0:
-            self.__index -= 1 #decrease pointer 
-            ret = self.__index != 0
-        
-        self.__keyboard.update(self.recipe_position, self.num_recipes)
-        self.__keyboard.reset()
-        return ret 
-    
-    def do_action(self, action: str):
-        self.__keyboard.do_action(action)
-
-    def delete_recipe(self):
-        """ Delete from the database the current recipe and update the viz state """
-
-        recipe_id = self.__recList[self.__index]
-        pass 

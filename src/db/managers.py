@@ -17,7 +17,7 @@ from db.mappings import (
 
 from collections import defaultdict
 import logging  
-import os 
+import os, shutil
 
 import db.entities as ent
 
@@ -192,7 +192,7 @@ class DBManager:
             Recipe.owner == user_id, 
             Recipe.name == recipe_name
         )).first()
-        logging.info(f"Query result of get_id_recipe: {result}")
+        logging.info(f"Result of get_id_recipe query: {result}")
         return result 
 
 
@@ -217,39 +217,42 @@ class DBManager:
             session.close() 
 
     
-    def delete_recipe(self, user_id: int, by_id: int = None, by_name: str = None):
+    def delete_recipe(self, user_id: int, by_id: int = None, by_name: str = None) -> int:
         """ Delete a recipe given the owner'id @user_id and either
-        - the recipe's id @by_id or the recipe's name @by_name """
+        - the recipe's id @by_id or the recipe's name @by_name.
+        Returns the deleted recipe's id, None otherwise. """
 
-        if by_id is None and by_name is None:
-            return False    #wtf 
+        recipe_id = None
 
-        try:
-            session = self.__sessionMaker()
-            query = session.query(Recipe)
-            qresult = None
+        if by_id or by_name:
+            try:
+                session = self.__sessionMaker()
+                query = session.query(Recipe)
+                qresult = None
 
-            if by_id:
-                qresult = query.filter(and_(
-                    Recipe.id == by_id, 
-                    Recipe.owner == user_id)).first() 
+                if by_id:
+                    qresult = query.filter(and_(
+                        Recipe.id == by_id, 
+                        Recipe.owner == user_id)).first() 
 
-            elif by_name:
-                qresult = query.filter(and_(
-                    Recipe.name == by_name, 
-                    Recipe.owner == user_id)).first() 
+                elif by_name:
+                    qresult = query.filter(and_(
+                        Recipe.name == by_name, 
+                        Recipe.owner == user_id)).first() 
 
-            if qresult:
-                session.delete(qresult)
-                session.commit()
+                if qresult:
+                    recipe_id = qresult.id 
+                    session.delete(qresult)
+                    session.commit()
 
-                logging.info(f"Recipe named {qresult.name} successfully deleted.")
-
-                return True 
-        except:
-            raise 
-        finally:
-            session.close() 
+                    logging.info(f"Recipe named {qresult.name} successfully deleted.")
+                    
+            except:
+                raise 
+            finally:
+                session.close() 
+        
+        return recipe_id
 
 
     
@@ -275,11 +278,13 @@ class DBManager:
             session.close() 
 
 class FSManager:
-    def __init__(self, dest_folder: str = "/data/recipes_folder"):
-        self.__folder = dest_folder
+    def __init__(self, procedure_folder: str, photo_folder: str):
+        self.__procedure_folder = procedure_folder
+        self.__photo_folder = photo_folder 
 
-        if not os.path.exists(dest_folder):
-            os.mkdir(dest_folder)
+        for dest_folder in (procedure_folder, photo_folder):
+            if not os.path.exists(dest_folder):
+                os.mkdir(dest_folder)
     
     def persist_procedure(self, recipe_obj: ent.Recipe, recipe_procedure: str):
         filepath = self.__filename(recipe_obj)
@@ -287,36 +292,84 @@ class FSManager:
         with open(filepath, "w") as fo:
             fo.write(recipe_procedure)
 
+    def persist_photos(self, recipe_obj: ent.Recipe, photo_list: list):
+        if photo_list:
+            photo_folder = self.__foldername(recipe_obj = recipe_obj)
+
+            if not os.path.exists(photo_folder):
+                os.mkdir(photo_folder)
+
+            for index, photo in enumerate(photo_list, 1):
+                filename = f"photo_{index}.jpg"
+                photo.download(os.path.join(photo_folder, filename))
+
+
     def get_procedure(self, recipe_obj: ent.Recipe) -> str:
+        """ Try to retrieve the procedure of @recipe_obj recipe from file. """
+
         filepath = self.__filename(recipe_obj)
         fcontent = None 
 
-        with open(filepath) as fi:
-            fcontent = fi.read()
+        try:
+            with open(filepath) as fi:
+                fcontent = fi.read()
+        except FileNotFoundError:
+            pass
         
         return fcontent
-    
-    def delete_procedure(self, recipe_obj):
-        filepath = self.__filename(recipe_obj)
 
-        if os._exists(filepath):
+    
+    def delete_procedure(self, recipe_obj: ent.Recipe = None, user_id: int = None, recipe_id: int = None):
+        """ Delete the procedure file associated to the recipe passed as parameter.  """
+        filepath = self.__filename(recipe_obj = recipe_obj, user_id = user_id, recipe_id = recipe_id)
+
+        if os.path.exists(filepath):
+            logging.info("File found")
             os.remove(filepath)
             return True 
-            
-        return False
-
-
     
-    def __filename(self, recipe_obj) -> str: 
-        filename = f"{recipe_obj.owner}_{recipe_obj.id}.txt"
-        return os.path.join(self.__folder, filename)
+    def delete_photos(self, recipe_obj: ent.Recipe = None, user_id: int = None, recipe_id: int = None):
+        """ Delete all the photos associated to the recipe passed as parameter. """
 
+        foldername = self.__foldername(recipe_obj, user_id, recipe_id)
+
+        if os.path.exists(foldername):
+            shutil.rmtree(foldername)
+
+    def __foldername(self, recipe_obj: ent.Recipe = None, user_id: int = None, recipe_id: int = None) -> str: 
+        """ Return the foldername where to save photos belonging to a specific recipe of a specific user """
+
+        univocal_id = self.__identifier(recipe_obj, user_id, recipe_id)
+        return os.path.join(self.__photo_folder, univocal_id)
+
+    def __filename(self, recipe_obj: ent.Recipe = None, user_id: int = None, recipe_id: int = None) -> str: 
+        """ Return the filename where to save the procedure of a specific recipe of a specific user """
+
+        univocal_id = self.__identifier(recipe_obj, user_id, recipe_id)
+        return os.path.join(self.__procedure_folder, f"{univocal_id}.txt")
+
+    def __identifier(self, recipe_obj: ent.Recipe = None, user_id: int = None, recipe_id: int = None) -> str: 
+        """ Return a string representing in a univocal way a certain recipe of a specific user.
+        That string is simply @user_id <underscore> @recipe_id  """
+
+        if recipe_obj:
+            user_id = recipe_obj.owner
+            recipe_id = recipe_obj.id 
+        
+        if user_id and recipe_id:
+            return f"{user_id}_{recipe_id}"
+
+        raise RuntimeError("Cannot obtain univocal identifier: missing data (user_id or recipe_id)")
 
 class PersistencyManager:
     def __init__(self, db_manager: DBManager):
         self.__base_folder = os.path.dirname(db_manager.database_name)
         self.__dbmanager = db_manager
-        self.__fsmanager = FSManager(dest_folder = os.path.join(self.__base_folder, "procedures"))
+
+        procedure_folder = os.path.join(self.__base_folder, "procedures")
+        photo_folder = os.path.join(self.__base_folder, "img")
+
+        self.__fsmanager = FSManager(procedure_folder, photo_folder)
     
     @property
     def db_manager(self):
@@ -332,8 +385,18 @@ class PersistencyManager:
 
         if new_recipe_id is not None: 
             self.fs_manager.persist_procedure(recipe_obj, recipe_procedure)
+            self.fs_manager.persist_photos(recipe_obj, recipe_photos)
 
         return new_recipe_id
     
     def delete_recipe(self, user_id: int, recipe_name: str = None, recipe_id: int = None):
-        pass
+        #try to delete recipe from db 
+        id_rec = self.__dbmanager.delete_recipe(user_id = user_id, by_id = recipe_id, by_name = recipe_name)
+
+        if id_rec:
+            logging.info(f"Recipe #{id_rec} successfully deleted.")
+            self.__fsmanager.delete_procedure(user_id = user_id, recipe_id = id_rec)
+            self.__fsmanager.delete_photos(user_id = user_id, recipe_id = id_rec)
+
+            return True 
+        

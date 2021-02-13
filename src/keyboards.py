@@ -29,8 +29,8 @@ class VizKeyboard:
             "bookmarks_back": "Dimentica",
             "edit": "Modifica", 
             "edit_back": "???", 
-#            "delete": "Elimina",
-#            "delete_back": "Premimi!!",
+            "delete": "Elimina",
+            "delete_back": "Premimi!!",
             "privacy": "Privacy",
             "see": "Ricetta", 
             "see_back": "Ingredienti",
@@ -50,13 +50,15 @@ class VizKeyboard:
         else:
             specific_commands = [
 #                "edit", 
-                "privacy"
+                "privacy",
+#                "delete"
             ]
         self.__actions.extend(specific_commands)
         self.__close_key = ["end"]
 
     def reset(self):
         """ Reset action keys in the keyboard """
+        
         self.__actions = [
             action.rstrip("_back") if action.endswith("_back") 
                 else action
@@ -156,10 +158,10 @@ class MainKeyboard:
 
 
 def save_recipe_keyboard():
-    return InlineKeyboardMarkup([[
-            InlineKeyboardButton("Sìììì", callback_data="1"), 
-            InlineKeyboardButton("Noope", callback_data="0")
-    ]])
+    return InlineKeyboardMarkup([
+            [InlineKeyboardButton("Sìììì", callback_data="1"), InlineKeyboardButton("Sìììì, ma senza nome", callback_data="1")], 
+            [InlineKeyboardButton("Noope", callback_data="0")]
+    ])
 
 def view_recipes_which():
     return InlineKeyboardMarkup([[

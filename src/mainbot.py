@@ -66,7 +66,7 @@ if __name__ == "__main__":
             ], 
             op.ChatOperation.INSERT_RECIPE: [
                 MessageHandler(Filters.text & ~Filters.command, op.end_recipe), 
-    #            MessageHandler(Filters.photo, op.add_photo)
+                MessageHandler(Filters.photo, op.add_photo)
             ],
             op.ChatOperation.VIEW_RECIPES: [
                 CallbackQueryHandler(op.get_recipe)

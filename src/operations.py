@@ -138,9 +138,9 @@ def end_recipe(update: Update, context: CallbackContext) -> int:
 
     if not user_recipe.recipe.ingredients:
         #back to add ingredient operation 
-        update.message.reply_text(
-            "Zio, non hai scritto gli ingredienti!!\n"
-            "Non sono ammesse ricette respiriane, quindi scrivili o vai a fare in culo.", 
+        update.message.reply_text(emojize(
+            "Zio, non mi hai mandato nessun ingrediente!!\n"
+            "Non sono ammesse ricette respiriane, quindi dimmi gli ingredienti o vai a fare in culo. :angry:",), 
             reply_markup = keyboard.add_ingredient_mode().get_kb()
         )
         return ChatOperation.ADD_INGREDIENT
@@ -152,7 +152,8 @@ def end_recipe(update: Update, context: CallbackContext) -> int:
         #send recipe description request
         update.message.reply_text(
             f"{user.first_name}, ci siamo quasi!\n"
-            "Inviami il procedimento per cucinare questa deliziosa ricetta!", 
+            "Se vuoi, mandami qualche foto della tua ricetta e del piatto finale!\n"
+            "Infine, inviami il procedimento per cucinare questa deliziosa ricetta!", 
             reply_markup = keyboard.add_recipe_mode().get_kb()
         )
         return ChatOperation.INSERT_RECIPE
@@ -162,11 +163,20 @@ def end_recipe(update: Update, context: CallbackContext) -> int:
         user_recipe.recipe_method = text_message #assuming that this text is the recipe procedure. 
         
         main_manager = context.bot_data["manager"]
-        user_recipe.recipe.id = main_manager.add_recipe(user_recipe.recipe, user_recipe.recipe_method)
+        user_recipe.recipe.id = main_manager.add_recipe(
+            user_recipe.recipe, 
+            user_recipe.recipe_method, 
+            user_recipe.photos
+        )
 
-        update.message.reply_text(f"Oppalà! Ho salvato la tua ricetta nel db!", 
+        update.message.reply_text(emojize(
+            f"Oppalà! Ho salvato la tua ricetta denominata '{user_recipe.recipe.name}' nel CringetteDB!\n"
+            "Di seguito un breve riepilogo; se vuoi modificare la ricetta... Al momento non puoi, sorry. :satisfied:\n"
+            f"Hai caricato {len(user_recipe.photos)} foto.\n"
+            f"Numero ingredienti: {len(user_recipe.recipe.ingredients)}\n"
+            f"Ingredienti: {user_recipe.recipe.ingredients}\n", use_aliases=True), 
             reply_markup = keyboard.main().get_kb())
-#            reply_markup = kb.main_keyboard(one_time_keyboard=False))
+            
         logger.info(f"User {user.id} ({user.first_name}) saved recipe {user_recipe.recipe.name} ({user_recipe.recipe.ingredients})")
 
         update.message.reply_text(
@@ -183,8 +193,6 @@ def add_photo(update: Update, context: CallbackContext) -> ChatOperation:
     new_photo = update.message.photo[-1].file_id
     new_photo = context.bot.get_file(new_photo)
     context.user_data[utils.OpBot.ADD_RECIPE].add_photo(new_photo)
-
-#        best.download("/data/")
 
 
 def set_privacy(update: Update, context: CallbackContext) -> ChatOperation:
@@ -215,8 +223,7 @@ def set_privacy(update: Update, context: CallbackContext) -> ChatOperation:
 
 def view_recipes(update: Update, context: CallbackContext) -> ChatOperation:
     update.message.reply_text(
-        "Procediamo! Vuoi vedere tutte e sole le tue ricette?\n"
-        "O solo le tue?", 
+        "Procediamo! Quali ricette vuoi vedere?", 
         reply_markup = kb.view_recipes_which()
     )
 
@@ -250,10 +257,12 @@ def get_recipe(update: Update, context: CallbackContext) -> None:
         return ChatOperation.ENTRYPOINT
 
     if response.endswith("_back") or response in ("see", "edit", "bookmarks", "delete", "privacy"):
-        actual_action, _, inverse_action = response.partition("_")
         #just a default message which will be removed sooner or later ... 
-        message = """Questa funzionalità non è inclusa nella versione free.
-Mandami 10€ in bitcoin e te la abilito (scherzo, ci sto lavorando! :see_no_evil:)"""
+        message = (
+            "Questa funzionalità non è inclusa nella versione free.\n"
+            "Mandami 0.001 bitcoin e te la abilito... Scherzo, ci sto lavorando! :see_no_evil:"
+        )
+        actual_action, _, inverse_action = response.partition("_")
 
         if actual_action == "see":
             if inverse_action: #get ingredients 
@@ -261,7 +270,11 @@ Mandami 10€ in bitcoin e te la abilito (scherzo, ci sto lavorando! :see_no_evi
             else:
                 curr_recipe = viz.get()
                 recipe_message = data_manager.fs_manager.get_procedure(curr_recipe)
-                message = f"Procedimento per <b>{curr_recipe.name}</b>\n\n{recipe_message}"
+
+                if recipe_message:
+                    message = f"Procedimento per <b>{curr_recipe.name}</b>\n\n{recipe_message}"
+                else:
+                    message = f"Impossibile recuperare il procedimento della ricetta <b>{curr_recipe.name}</b>"
                 
         elif actual_action == "edit":
             if inverse_action:
@@ -297,10 +310,8 @@ Mandami 10€ in bitcoin e te la abilito (scherzo, ci sto lavorando! :see_no_evi
     elif response == "prev":
         viz.prev()
 
-    message = viz.get(format=True)
-
     query.edit_message_text(
-        text = message, 
+        text = viz.get(format=True), 
         reply_markup = viz.keyboard, 
         parse_mode=ParseMode.HTML
     )
