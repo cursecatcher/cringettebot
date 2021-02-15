@@ -4,6 +4,7 @@ class Recipe:
     def __init__(self, name = None, owner = None, recipe_obj = None):
         self.__ingredients = set()
         self.__id = None
+        self.__global_visibility = False 
 
         if recipe_obj is not None: 
             self.__name = recipe_obj.name 
@@ -28,6 +29,14 @@ class Recipe:
     @id.setter 
     def id(self, id_value):
         self.__id = id_value
+    
+    @property
+    def visibility(self):
+        return self.__global_visibility
+    
+    @visibility.setter
+    def visibility(self, value):
+        self.__global_visibility = value 
     
     @property
     def ingredients(self):

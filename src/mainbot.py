@@ -3,7 +3,6 @@
 
 import argparse
 import logging
-import enum
 import sys  
 
 from telegram.ext import (
@@ -34,33 +33,21 @@ if __name__ == "__main__":
     parser.add_argument("--data", action="store", type=str, default="./my_recipes.db")
     args = parser.parse_args()
 
-    db_manager = op.DBManager(db_name=args.data)
-
     updater = Updater(args.token, use_context=True)
     dispatcher = updater.dispatcher
 
     accepted_str = "|".join([x.value for x in op.ButtonText])
     regex_handler = MessageHandler(Filters.regex(f"^({accepted_str})$"), op.entrypoint)
 
-    add_recipe_handler = CommandHandler("add", op.add_recipe)
-    view_recipes_handler = CommandHandler("view", op.view_recipes)
-    start_handler = CommandHandler("start", op.start)
-
 
     conv_handler = ConversationHandler(
         entry_points = [
-            start_handler,
+            CommandHandler("start", op.start),
             regex_handler, 
-            add_recipe_handler, 
-            view_recipes_handler
+            CommandHandler("add", op.add_recipe), 
+            CommandHandler("view", op.view_recipes)
         ], 
         states = {
-            op.ChatOperation.ENTRYPOINT: [
-                regex_handler,
-                start_handler,
-                add_recipe_handler, 
-                view_recipes_handler
-            ], 
             op.ChatOperation.ADD_INGREDIENT: [
                 MessageHandler(Filters.text & ~Filters.command, op.add_ingredient)
             ], 
@@ -79,10 +66,10 @@ if __name__ == "__main__":
             CommandHandler("cancel", op.cancel), 
             CommandHandler("help", op.helper)
         ]
-
     )
 
-    #connect the bot to the database 
+    #connect the bot to the database
+    db_manager = op.DBManager(db_name=args.data) 
     dispatcher.bot_data["manager"] = op.PersistencyManager(db_manager)
 
     dispatcher.add_handler(conv_handler)

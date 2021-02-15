@@ -1,26 +1,10 @@
 #-*- coding: utf-8 -*-
 
-import enum, logging
+import logging
 from db.managers import PersistencyManager
 
 import keyboards
-
-class OpBot(enum.Enum):
-    ADD_RECIPE = "add"
-    VIEW_RECIPES = "view"
-
-# TODO 
-# class Operation:
-#     def __init__(self, operation: OpBot):
-#         #TODO
-#         pass
-
-class RecipeInsertionStatus(enum.Enum):
-    ADD_INGREDIENT = enum.auto()
-    ADD_PROCEDURE = enum.auto()
-    ADD_PHOTO = enum.auto()
-    SET_PRIVACY = enum.auto()
-
+from enums import OpBot
 
 
 class RecipeInsertionOperation:
@@ -101,20 +85,22 @@ class RecipeViz:
         self.__personal_flag = only_personal_rec
         is_global_search = not only_personal_rec
 
-        self.__recList = list()
-        self.__cache = list() 
-        self.__index = 0
-
-        self.__recList = self.__data_manager.db_manager.get_recipes(
+        # obtain a list of pairs (id_recipe, recipe_privacy)
+        recList = self.__data_manager.db_manager.get_recipes(
             user_id, 
             id_only=True, 
             all_recipes=is_global_search
         )
+        
+        #obtain two lists: the former for recipe's id, the latter for recipe's privacy
+        self.__recList, self.__privList = [list(x) for x in zip(*recList)]
         self.__cache = [None for elem in self.__recList]
+        self.__index = 0
 
         #init keyboard state 
         self.__keyboard = keyboards.VizKeyboard(global_kb=is_global_search)
         self.__keyboard.update(self.recipe_position, self.num_recipes)
+        self.__keyboard.reset(privacy_key_string = self.recipe_visibility)
         
     
     @property
@@ -137,6 +123,10 @@ class RecipeViz:
     @property
     def recipe_id(self):
         return self.__recList[self.__index]
+    
+    @property
+    def recipe_visibility(self):
+        return self.__privList[self.__index]
         
     def next(self):
         ret = False
@@ -146,7 +136,7 @@ class RecipeViz:
             ret = self.__index != len(self.__recList) - 1
 
         self.__keyboard.update(self.recipe_position, self.num_recipes)
-        self.__keyboard.reset()
+        self.__keyboard.reset(privacy_key_string = self.recipe_visibility)
         return ret
 
     def prev(self):
@@ -157,11 +147,17 @@ class RecipeViz:
             ret = self.__index != 0
         
         self.__keyboard.update(self.recipe_position, self.num_recipes)
-        self.__keyboard.reset()
+        self.__keyboard.reset(privacy_key_string = self.recipe_visibility)
         return ret 
     
     def do_action(self, action: str):
         self.__keyboard.do_action(action)
+
+
+    def toggle_privacy(self, new_privacy_value):
+        self.__keyboard.set_privacy(new_privacy_value) 
+        self.__privList[self.__index] = new_privacy_value
+        return new_privacy_value
 
     def delete_recipe(self):
         """ Delete from the database the current recipe and update the viz state """

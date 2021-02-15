@@ -90,7 +90,7 @@ class DBManager:
             recipe = Recipe(
                 name=recipe_entity.name, 
                 owner=recipe_entity.owner, 
-                public_flag=False
+                public_flag=recipe_entity.visibility
             )
             ### adding ingredient ids to the new recipe
             for ingredient in my_ingredients:
@@ -117,6 +117,7 @@ class DBManager:
         recipe_entity.id = new_recipe_id
         return new_recipe_id
 
+
     def get_recipe_by_id(self, recipe_id: int) -> ent.Recipe:
         """ Retrieve a recipe from the db given its id @recipe_id """
 
@@ -137,14 +138,13 @@ class DBManager:
         return my_recipe
 
 
-
     def get_recipes(self, 
             user_id: int, 
             id_only: bool = False, 
             all_recipes: bool = False):
         """ Retrieve the recipes belonging to @user_id from the database 
         if @all_recipes is True. Otherwise it returns all the public recipes.
-        If @id_only is True, then only the recipes' id are returned. """
+        If @id_only is True, then a pair containing the recipe id and the recipe privacy is returned. """
 
         try:
             session = self.__sessionMaker() 
@@ -156,7 +156,7 @@ class DBManager:
 
             if id_only:
                 for my_recipe in query.all():
-                    recipes_list.append(my_recipe.id)
+                    recipes_list.append((my_recipe.id, my_recipe.public_flag))
             else:
                 for my_recipe in query.all():
                     curr_recipe = ent.Recipe(recipe_obj = my_recipe)
@@ -182,18 +182,9 @@ class DBManager:
 
         try:
             session = self.__sessionMaker() 
-            return (self.__get_recipe(session, recipe.name, recipe.owner) is None)
+            return (self.get_recipe_pro(session, user_id=recipe.owner, by_what=recipe.name) is None)
         finally:
             session.close()
-    
-
-    def __get_recipe(self, session, recipe_name: str, user_id: int):
-        result = session.query(Recipe).filter(and_(
-            Recipe.owner == user_id, 
-            Recipe.name == recipe_name
-        )).first()
-        logging.info(f"Result of get_id_recipe query: {result}")
-        return result 
 
 
     def toggle_privacy(self, user_id: int, recipe_id: int):
@@ -216,44 +207,46 @@ class DBManager:
         finally:
             session.close() 
 
-    
+    def get_recipe_pro(self, session, user_id: int, by_what) -> Recipe:
+        """ @by_what can be either int or string """
+        query = session.query(Recipe)
+
+        if isinstance(by_what, int):
+            return query.filter(and_(
+                Recipe.id == by_what, Recipe.owner == user_id)).first() 
+
+        elif isinstance(by_what, str):
+            return query.filter(and_(
+                Recipe.name == by_what, Recipe.owner == user_id)).first() 
+
+        else:
+            raise RuntimeError("By what argument must be either str or int.")
+
+
+
     def delete_recipe(self, user_id: int, by_id: int = None, by_name: str = None) -> int:
         """ Delete a recipe given the owner'id @user_id and either
         - the recipe's id @by_id or the recipe's name @by_name.
         Returns the deleted recipe's id, None otherwise. """
+   
 
-        recipe_id = None
+        try:
+            session = self.__sessionMaker()
+            qresult = self.get_recipe_pro(session, user_id, 
+                by_id if by_id and isinstance(by_id, int) else str(by_name)
+            )
 
-        if by_id or by_name:
-            try:
-                session = self.__sessionMaker()
-                query = session.query(Recipe)
-                qresult = None
+            if qresult:
+                recipe_id = qresult.id 
+                session.delete(qresult)
+                session.commit()
 
-                if by_id:
-                    qresult = query.filter(and_(
-                        Recipe.id == by_id, 
-                        Recipe.owner == user_id)).first() 
-
-                elif by_name:
-                    qresult = query.filter(and_(
-                        Recipe.name == by_name, 
-                        Recipe.owner == user_id)).first() 
-
-                if qresult:
-                    recipe_id = qresult.id 
-                    session.delete(qresult)
-                    session.commit()
-
-                    logging.info(f"Recipe named {qresult.name} successfully deleted.")
-                    
-            except:
-                raise 
-            finally:
-                session.close() 
-        
-        return recipe_id
-
+                logging.info(f"Recipe named {qresult.name} successfully deleted.")
+                return recipe_id
+        except:
+            raise
+        finally:
+            session.close()
 
     
     def show_table_content(self):
@@ -388,6 +381,10 @@ class PersistencyManager:
             self.fs_manager.persist_photos(recipe_obj, recipe_photos)
 
         return new_recipe_id
+    
+    def get_recipe(self, user_id: int, recipe_name: str = None, recipe_id: int = None):
+        #recipe_obj = self.__dbmanager.
+        pass 
     
     def delete_recipe(self, user_id: int, recipe_name: str = None, recipe_id: int = None):
         #try to delete recipe from db 

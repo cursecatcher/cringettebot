@@ -31,7 +31,7 @@ class VizKeyboard:
             "edit_back": "???", 
             "delete": "Elimina",
             "delete_back": "Premimi!!",
-            "privacy": "Privacy",
+            "privacy": "_________",
             "see": "Ricetta", 
             "see_back": "Ingredienti",
             #move actions
@@ -44,6 +44,7 @@ class VizKeyboard:
         self.__move_status = [True, True]
         self.__move_keys = ["prev", "next"]
         self.__actions = ["see"]
+        self.__global_keyboard_mode = global_kb
         #define commands for global and local search
         if global_kb:
             specific_commands = ["bookmarks"]
@@ -51,12 +52,12 @@ class VizKeyboard:
             specific_commands = [
 #                "edit", 
                 "privacy",
-#                "delete"
+                "delete"
             ]
         self.__actions.extend(specific_commands)
         self.__close_key = ["end"]
 
-    def reset(self):
+    def reset(self, privacy_key_string = None):
         """ Reset action keys in the keyboard """
         
         self.__actions = [
@@ -64,6 +65,14 @@ class VizKeyboard:
                 else action
                     for action in self.__actions
         ]
+
+        self.set_privacy(privacy_key_string)
+        
+
+    def set_privacy(self, privacy_value):
+        if not self.__global_keyboard_mode:
+            self.__all_keys["privacy"] = "Nascondi!!" if privacy_value else "Pubblica!!"
+
 
     def do_action(self, input_action: str):
         """ Update the keyboard's status given the last pressed key """
@@ -159,8 +168,7 @@ class MainKeyboard:
 
 def save_recipe_keyboard():
     return InlineKeyboardMarkup([
-            [InlineKeyboardButton("Sìììì", callback_data="1"), InlineKeyboardButton("Sìììì, ma senza nome", callback_data="1")], 
-            [InlineKeyboardButton("Noope", callback_data="0")]
+            [InlineKeyboardButton("Sìììì", callback_data="YES"), InlineKeyboardButton("Noope", callback_data="NO")]
     ])
 
 def view_recipes_which():

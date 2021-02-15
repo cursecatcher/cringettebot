@@ -1,6 +1,6 @@
 #-*- coding: utf-8 -*-
 
-import enum, logging
+import logging
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -23,6 +23,7 @@ from db.entities import Ingredient, Recipe
 from db.managers import DBManager, PersistencyManager
 import utils
 
+from enums import ChatOperation, ViewAction
 import keyboards as kb 
 from keyboards import ButtonText
 
@@ -33,13 +34,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
-class ChatOperation(enum.Enum):
-    INSERT_RECIPE = 1
-    VIEW_RECIPES = 2 
-    ADD_INGREDIENT = 3 
-    ENTRYPOINT = 4
-    PRIVACY = 5
 
 
 
@@ -59,7 +53,7 @@ def start(update: Update, context: CallbackContext) -> ChatOperation:
 
     logger.info(f"User {update.message.from_user.first_name} presses {update.message.text}")
 
-    return ChatOperation.ENTRYPOINT
+    return ConversationHandler.END
 
 
 def entrypoint(update: Update, context: CallbackContext) -> ChatOperation:
@@ -92,11 +86,10 @@ def add_ingredient(update: Update, context: CallbackContext) -> ChatOperation:
         return end_recipe(update, context)
 
     try:
-        #adding a new ingredient to a recipe previously initialized 
-        logger.info(f"User {user.first_name} is adding a new ingredient: {curr_text}")
-
+        #adding a new ingredient to a recipe previously initialized
         user_recipe = context.user_data[utils.OpBot.ADD_RECIPE]
-        user_recipe.add_ingredient(curr_text)
+        user_recipe.add_ingredient(curr_text) 
+        logger.info(f"User {user.first_name} is adding a new ingredient: {curr_text}")
 
     except KeyError:
         #initialization new recipe 
@@ -162,49 +155,45 @@ def end_recipe(update: Update, context: CallbackContext) -> int:
         #save recipe description 
         user_recipe.recipe_method = text_message #assuming that this text is the recipe procedure. 
         
-        main_manager = context.bot_data["manager"]
-        user_recipe.recipe.id = main_manager.add_recipe(
-            user_recipe.recipe, 
-            user_recipe.recipe_method, 
-            user_recipe.photos
-        )
-
         update.message.reply_text(emojize(
-            f"Oppalà! Ho salvato la tua ricetta denominata '{user_recipe.recipe.name}' nel CringetteDB!\n"
-            "Di seguito un breve riepilogo; se vuoi modificare la ricetta... Al momento non puoi, sorry. :satisfied:\n"
-            f"Hai caricato {len(user_recipe.photos)} foto.\n"
+        #    f"Oppalà! Ho salvato la tua ricetta denominata '{user_recipe.recipe.name}' nel CringetteDB!\n"
+            f"Di seguito un breve riepilogo della tua ricetta '{user_recipe.recipe.name}'\n"
             f"Numero ingredienti: {len(user_recipe.recipe.ingredients)}\n"
-            f"Ingredienti: {user_recipe.recipe.ingredients}\n", use_aliases=True), 
+            f"Ingredienti: {user_recipe.recipe.ingredients}\n"
+            f"Hai caricato {len(user_recipe.photos)} foto.\n", use_aliases=True), 
             reply_markup = keyboard.main().get_kb())
             
-        logger.info(f"User {user.id} ({user.first_name}) saved recipe {user_recipe.recipe.name} ({user_recipe.recipe.ingredients})")
+    #    logger.info(f"User {user.id} ({user.first_name}) saved recipe {user_recipe.recipe.name} ({user_recipe.recipe.ingredients})")
 
         update.message.reply_text(
-            "Vuoi rendere visibile questa tua ricetta anche agli altri utenti?", 
+            "Sono pronto a salvare la ricetta nel database!\n"
+            "Vuoi renderla visibile anche agli altri utenti del bot?", 
             reply_markup = kb.save_recipe_keyboard()
         )
         return ChatOperation.PRIVACY
         
-    return ChatOperation.ENTRYPOINT
+    return ConversationHandler.END
 
 
 def add_photo(update: Update, context: CallbackContext) -> ChatOperation:
-    logging.info("Photo callback...")
-    new_photo = update.message.photo[-1].file_id
-    new_photo = context.bot.get_file(new_photo)
+    new_photo = context.bot.get_file( update.message.photo[-1].file_id )
     context.user_data[utils.OpBot.ADD_RECIPE].add_photo(new_photo)
 
 
 def set_privacy(update: Update, context: CallbackContext) -> ChatOperation:
     query = update.callback_query
     query.answer() 
-    db_manager = context.bot_data["manager"].db_manager
 
     try:
-        response = bool(int(query.data))
+        response = query.data == "YES"
         user_recipe = context.user_data[utils.OpBot.ADD_RECIPE]
+        user_recipe.recipe.visibility = response
 
-        db_manager.set_recipe_privacy(user_recipe.recipe.id, response)
+        context.bot_data["manager"].add_recipe(
+            user_recipe.recipe, 
+            user_recipe.recipe_method, 
+            user_recipe.photos
+        )
 
         message = "Grande spirito di condivisione, complimenti!!" if response else \
                 "Ok, tieniti pure i tuoi segreti!"
@@ -212,13 +201,16 @@ def set_privacy(update: Update, context: CallbackContext) -> ChatOperation:
         query.edit_message_text(message)
         context.user_data.clear() 
 
-        return ChatOperation.ENTRYPOINT
-
-    except ValueError:
+        return ConversationHandler.END 
+    except KeyError:
         recipe_id = context.user_data[utils.OpBot.VIEW_RECIPES].recipe_id
         logging.info(f"Toggling privacy of recipe #{recipe_id}")
 
-        return db_manager.toggle_privacy(query.from_user.id, recipe_id)
+        return context.bot_data["manager"].db_manager.toggle_privacy(
+            query.from_user.id, 
+            recipe_id
+        ) 
+
 
 
 def view_recipes(update: Update, context: CallbackContext) -> ChatOperation:
@@ -240,7 +232,7 @@ def get_recipe(update: Update, context: CallbackContext) -> None:
     if response == "end":
         query.edit_message_text("Cya!")
         del context.user_data[utils.OpBot.VIEW_RECIPES]
-        return ChatOperation.ENTRYPOINT
+        return ConversationHandler.END
 
     if utils.OpBot.VIEW_RECIPES not in context.user_data:
         if response not in ("all", "mine"):
@@ -254,19 +246,21 @@ def get_recipe(update: Update, context: CallbackContext) -> None:
     if viz.num_recipes == 0:
         query.edit_message_text("Nessuna ricetta presente. Premi /add per aggiungerne una!")
         del context.user_data[utils.OpBot.VIEW_RECIPES]
-        return ChatOperation.ENTRYPOINT
+        return ConversationHandler.END    
+    
 
-    if response.endswith("_back") or response in ("see", "edit", "bookmarks", "delete", "privacy"):
+    if ViewAction.get(response) != ViewAction.UNKNOWN:
         #just a default message which will be removed sooner or later ... 
         message = (
             "Questa funzionalità non è inclusa nella versione free.\n"
             "Mandami 0.001 bitcoin e te la abilito... Scherzo, ci sto lavorando! :see_no_evil:"
         )
         actual_action, _, inverse_action = response.partition("_")
+        actual_action = ViewAction(actual_action)
 
-        if actual_action == "see":
+        if actual_action == ViewAction.VIEW_SEE:
             if inverse_action: #get ingredients 
-                message = viz.get(format=True) #ridondanteeee
+                message = viz.get(format=True)
             else:
                 curr_recipe = viz.get()
                 recipe_message = data_manager.fs_manager.get_procedure(curr_recipe)
@@ -276,26 +270,33 @@ def get_recipe(update: Update, context: CallbackContext) -> None:
                 else:
                     message = f"Impossibile recuperare il procedimento della ricetta <b>{curr_recipe.name}</b>"
                 
-        elif actual_action == "edit":
+        elif actual_action == ViewAction.VIEW_EDIT:
             if inverse_action:
                 message = viz.get(format=True)
 
-        elif actual_action == "bookmarks":
+        elif actual_action == ViewAction.VIEW_BMARK:
             if inverse_action:
                 message = viz.get(format=True)
         
-        elif actual_action == "delete":
+        elif actual_action == ViewAction.VIEW_DELETE:
+            recipe_name = viz.get().name
             viz.delete_recipe()
+            message = f"La tua ricetta chiamata '{recipe_name}' è stata cancellata per sempre!\nDovrei aggiungere un tasto di conferma secondo te?"
         
-        elif actual_action == "privacy":
-            new_privacy = set_privacy(update, context)
+        elif actual_action == ViewAction.VIEW_PRIVACY:
+            visible = viz.toggle_privacy(set_privacy(update, context))
+            message = viz.get(format=True)
+            
+            visible_str = "pubblica" if visible else "privata"
+            #c'è qualcosa da sistemare [cit. resca]
+            value = context.bot.answer_callback_query(
+                callback_query_id = query.id, 
+                text = f"Da ora la ricetta {viz.get().name} è {visible_str}.",
+                show_alert = False,
+                cache_time = 3, 
+                timeout = 1
+            )
 
-            if new_privacy is not None: 
-                new_privacy = "pubblica" if new_privacy else "privata"
-                message = f"Fatto! La ricetta <b>{viz.get().name}</b> è ora {new_privacy}!"
-            else:
-                message = "Qualcosa è andato storto. Segnala il bug al mio creatore @Cursecatcher, plz."
-             
         viz.do_action(response)
         query.edit_message_text(
             emojize(message, use_aliases=True), 
@@ -303,20 +304,22 @@ def get_recipe(update: Update, context: CallbackContext) -> None:
             parse_mode=ParseMode.HTML
         )
 
-        return ChatOperation.VIEW_RECIPES
-
+        return ChatOperation.VIEW_RECIPES 
+    
     if response == "next":
         viz.next()
     elif response == "prev":
         viz.prev()
 
+  #  logging.info(f"CHAT ID: {update.message.chat.id}")
+    logging.info(f"Chat id: {query.message.chat.id}")
     query.edit_message_text(
         text = viz.get(format=True), 
         reply_markup = viz.keyboard, 
         parse_mode=ParseMode.HTML
     )
-
     return ChatOperation.VIEW_RECIPES 
+
 
 
 def helper(update: Update, context: CallbackContext) -> ChatOperation:
@@ -332,7 +335,7 @@ def helper(update: Update, context: CallbackContext) -> ChatOperation:
     )
     #NB. currently the helper removes the current action 
     context.user_data.clear() 
-    return ChatOperation.ENTRYPOINT
+    return ConversationHandler.END
 
 
 def cancel(update: Update, context: CallbackContext) -> int:
@@ -346,8 +349,8 @@ def cancel(update: Update, context: CallbackContext) -> int:
 
     context.user_data.clear() 
 
-    return ChatOperation.ENTRYPOINT
+    return ConversationHandler.END
 
 def error(update, context):
     """Log Errors caused by Updates."""
-    logger.warning(f"Update {update} caused error {context.error}")
+    logger.warning(f"An error has occurred!!\nCurrent update: {update}\nError: {context.error}")
