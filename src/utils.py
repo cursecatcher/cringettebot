@@ -1,106 +1,112 @@
 #-*- coding: utf-8 -*-
 
 import logging
+import re 
 from db.managers import PersistencyManager
+import db.entities as entities
 
 import keyboards
 from enums import OpBot
 
 
-class RecipeInsertionOperation:
-    def __init__(self, user_data):
+class RecipeAddNew:
+    def __init__(self, user_id):
+        self.__user_id = user_id
         self.__recipe = None 
         self.__recipe_method = None 
-        self.__photos = list()
+        self.__ingredients = list()
+        self.__photos = list() 
 
-        #adding this object to context.user_data 
-        if OpBot.ADD_RECIPE not in user_data:
-            user_data[OpBot.ADD_RECIPE] = self
-            #init keyboard state 
-            self.__keyboard = keyboards.MainKeyboard()
-        else:
-            raise RuntimeError("RecipeInsertionOperation object already present in user_data.")
-    
-    @property
-    def recipe(self):
-        return self.__recipe
+        self.__splitter = re.compile(r",|\n|;")
+        self.__keyboard = keyboards.MainKeyboard()
+
 
     @property
     def keyboard(self):
         return self.__keyboard
 
     @property
-    def recipe_method(self):
-        return self.__recipe_method
+    def recipe_name(self):
+        return self.__recipe.name if self.__recipe else None 
+    
+    @property
+    def recipe(self):
+        return self.__recipe
 
     @property
     def photos(self):
         return self.__photos
+    
+    @property
+    def recipe_method(self):
+        return self.__recipe_method
+    
+    @recipe_method.setter
+    def recipe_method(self, text):
+        self.__recipe_method = text 
 
-    @recipe.setter
-    def recipe(self, recipe_obj):
-        self.__recipe = recipe_obj
+    def init_recipe(self, recipe_name):
+        logging.info(f"Recipe name is {recipe_name} belonging to user {self.__user_id}")
+        self.__recipe = entities.Recipe(name = recipe_name, owner = self.__user_id)
+    
+    def save_ingredients(self):
+        for ingredient in self.__ingredients:
+            self.__recipe.add_ingredient(ingredient)
+        return bool(self.__ingredients)
 
     def add_ingredient(self, ingredient_name: str):
-        commas = "," in ingredient_name
-        new_lines = "\n" in ingredient_name
+        ingredient_list = [name.strip() for name in self.__splitter.split(ingredient_name)]
+        self.__ingredients.extend([name for name in ingredient_list if len(name) > 0])
 
-        if not commas and not new_lines:
-            #there are no separators in the given string: assuming is a single ingredient
-            logging.info(f"Saving single ingredient: {ingredient_name}")
-            self.__recipe.add_ingredient(ingredient_name)
-        else:
-            #there is at least one accepted separator...
+        logging.info(f"Adding the following ingredients: {ingredient_list}")
 
-            #if the (satanic) user mixed both commas and \n symbols, just remove one of them
-            if commas and new_lines:
-                #now there is just one separator (commas)
-                ingredient_name = ingredient_name.replace("\n", ",")
-            
-            sep = "," if commas else "\n"
-            logging.info(f"Using separator '{sep}' to split '{ingredient_name}'")
-            ingredient_list = [i for i in ingredient_name.split(sep) if len(i.strip()) > 0]
-            logging.info(f"Saving the following ingredients: {ingredient_list}")
 
-            for single_ingredient in ingredient_list:
-                self.__recipe.add_ingredient(single_ingredient)
-    
     def add_photo(self, photo_obj):
         self.__photos.append(photo_obj)
         logging.info(f"Attaching new photo to recipe {self.__recipe.name}")
 
     def save_photos(self):
-        for n, photo in enumerate(self.photos):
+        for n, photo in enumerate(self.__photos):
             photo.download(f"/data/file_{n}.jpg")
 
-    @recipe_method.setter
-    def recipe_method(self, method):
-        self.__recipe_method = method 
-
-
+ 
 class RecipeViz:
-    def __init__(self, data_manager: PersistencyManager, user_id: int, only_personal_rec: bool = True):
+    def __init__(self, 
+        data_manager: PersistencyManager, 
+        user_id: int, 
+        only_personal_rec: bool = True, 
+        recipe_id_list: list = None, 
+        disable_kb_actions: bool = False
+    ):
         self.__data_manager = data_manager  
         self.__user_id = user_id
         self.__personal_flag = only_personal_rec
         is_global_search = not only_personal_rec
 
-        # obtain a list of pairs (id_recipe, recipe_privacy)
-        recList = self.__data_manager.db_manager.get_recipes(
-            user_id, 
-            id_only=True, 
-            all_recipes=is_global_search
-        )
+        #init keyboard state 
+        self.__keyboard = keyboards.VizKeyboard(global_kb=is_global_search, disable_actions=disable_kb_actions)
+        self.__index = 0
+        self.__recList, self.__privList = list(), list()
+        self.__cache = list()
+
+        if recipe_id_list:
+            #TODO - fix privacy values 
+            recList = [(recipe_id, True) for recipe_id in recipe_id_list] 
+        else:
+            # obtain a list of pairs (id_recipe, recipe_privacy)
+            recList = self.__data_manager.db_manager.get_recipes(
+                user_id, 
+                id_only=True, 
+                all_recipes=is_global_search
+            )
         
         #obtain two lists: the former for recipe's id, the latter for recipe's privacy
-        self.__recList, self.__privList = [list(x) for x in zip(*recList)]
-        self.__cache = [None for elem in self.__recList]
-        self.__index = 0
+        if recList:
+            self.__recList, self.__privList = [list(x) for x in zip(*recList)]
+            self.__cache = [None for elem in self.__recList]
 
-        #init keyboard state 
-        self.__keyboard = keyboards.VizKeyboard(global_kb=is_global_search)
-        self.__keyboard.update(self.recipe_position, self.num_recipes)
-        self.__keyboard.reset(privacy_key_string = self.recipe_visibility)
+            self.__keyboard.update(self.recipe_position, self.num_recipes)
+            self.__keyboard.reset(privacy_key_string = self.recipe_visibility)
         
     
     @property
@@ -196,3 +202,55 @@ Ingredienti:
 Ricetta {self.recipe_position}/{self.num_recipes}"""
 
         return message 
+
+
+class Searcher:
+    def __init__(self, data_manager: PersistencyManager, user_id: int):
+        self.__data_manager = data_manager
+        self.__user = user_id
+        self.__all_tokens = list() #all tokens here 
+        self.__tokens = list()     #word token here 
+        self.__hashtags = list()   #hashtags here 
+        self.__viz = None 
+
+        self.__splitter = re.compile(r",|\n|\s|;")
+    
+    @property
+    def visualization(self) -> RecipeViz:
+        return self.__viz
+
+    @property
+    def all_tokens(self) -> list:
+        return self.__all_tokens
+
+    def add_token(self, message):
+        self.__all_tokens.extend(self.__splitter.split(message))
+
+    def parse(self):         
+        for token in self.__all_tokens:
+            target_list = self.__hashtags if token.startswith("#") else self.__tokens
+            target_list.extend(token.split())
+
+        logging.info(f"Tokens: {self.__tokens}\nHashtags: {self.__hashtags}")
+
+    def is_instantiated(self) -> bool:
+        return (self.__viz is not None)
+    
+    def instantiate(self, global_search) -> bool:
+        """Initialize the visualization manager """
+
+        recipes_id = self.__data_manager.db_manager.search_recipes(
+            self.__tokens, self.__user, global_search
+        )
+        if recipes_id:
+            self.__viz = RecipeViz(
+                self.__data_manager, 
+                self.__user, 
+                only_personal_rec=(not global_search), 
+                recipe_id_list=recipes_id, 
+                disable_kb_actions=True
+            )
+            return True
+
+        return False 
+

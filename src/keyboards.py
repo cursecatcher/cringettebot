@@ -16,13 +16,14 @@ class ButtonText(enum.Enum):
     NEW_RECIPE = emojize(":heavy_plus_sign: Nuova", use_aliases=True)
     VIEW_RECIPES = emojize(":book: Lista", use_aliases=True)
     HELP = emojize(":sos: Aiuto", use_aliases=True)
+    SEARCH_RECIPES = emojize(":mag: Search", use_aliases=True)
 
     END_RECIPE = emojize(":ok: Salva!! :ok:", use_aliases=True)
     CANCEL_NEW_RECIPE = emojize(":a::b::o2:RT", use_aliases=True)
 
 
 class VizKeyboard:
-    def __init__(self, global_kb: bool = False):
+    def __init__(self, global_kb: bool = False, disable_actions: bool = False):
         self.__all_keys = {
             #actions
             "bookmarks": ":pushpin: Salva!", 
@@ -44,6 +45,7 @@ class VizKeyboard:
         self.__move_status = [True, True]
         self.__move_keys = ["prev", "next"]
         self.__actions = ["see"]
+        self.__disable_actions = disable_actions
         self.__global_keyboard_mode = global_kb
         #define commands for global and local search
         if global_kb:
@@ -111,7 +113,9 @@ class VizKeyboard:
         """Return an InlineKeyboardMarkup representing the actual state of @self"""
         move = [k for k, s in zip(self.__move_keys, self.__move_status) if s]
         move = self.__get_inline_keys(move)
-        actions = self.__get_inline_keys(self.__actions)
+        actions = [action for action in self.__actions if action.startswith("see")] \
+                  if self.__disable_actions else self.__actions
+        actions = self.__get_inline_keys(actions)
         close = self.__get_inline_keys(self.__close_key)
 
         return InlineKeyboardMarkup([move, actions, close])
@@ -139,6 +143,7 @@ class MainKeyboard:
         self.__all_keys = {
             "new": ButtonText.NEW_RECIPE.value, 
             "view": ButtonText.VIEW_RECIPES.value, 
+            "search": ButtonText.SEARCH_RECIPES.value,
             "help": ButtonText.HELP.value, 
             "end": ButtonText.END_RECIPE.value, 
             "cancel": ButtonText.CANCEL_NEW_RECIPE.value
@@ -149,7 +154,7 @@ class MainKeyboard:
     def main(self):
         """ Reset keyboard to the main one """
 
-        self.__keys = ["new", "view", "help"]
+        self.__keys = ["new", "view", "search", "help"]
         return self 
     
     def add_ingredient_mode(self):
@@ -177,3 +182,7 @@ def view_recipes_which():
         InlineKeyboardButton("Solo le mie!", callback_data="mine")
     ]])
 
+def search_recipes_keyboard():
+    return ReplyKeyboardMarkup(
+        [["Ho finito!", "Annullaci tutto"]], one_time_keyboard=True, resize_keyboard=True
+    )

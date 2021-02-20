@@ -11,6 +11,7 @@ class Operation:
 class OpBot(enum.Enum):
     ADD_RECIPE = "add"
     VIEW_RECIPES = "view"
+    SEARCH = "search"
 
 
 class RecipeInsertionStatus(enum.Enum):
@@ -45,4 +46,5 @@ class ChatOperation(enum.Enum):
     ADD_INGREDIENT = 3 
     ENTRYPOINT = 4
     PRIVACY = 5
+    SEARCH_BY = 6
 

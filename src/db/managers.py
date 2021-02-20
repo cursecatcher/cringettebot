@@ -177,12 +177,18 @@ class DBManager:
 
     
 
-    def check_recipe_availability(self, recipe: ent.Recipe) -> bool:
+    def check_recipe_availability(self, 
+        recipe_name: str = None, 
+        recipe_owner: int = None,  
+        recipe: ent.Recipe = None
+    ) -> bool:
         """ Check if the recipe name is avaiable for the specified user """
 
         try:
             session = self.__sessionMaker() 
-            return (self.get_recipe_pro(session, user_id=recipe.owner, by_what=recipe.name) is None)
+            if recipe: 
+                recipe_name, recipe_owner = recipe.name, recipe.owner
+            return (self.get_recipe_pro(session, user_id=recipe_owner, by_what=recipe_name) is None)
         finally:
             session.close()
 
@@ -193,19 +199,19 @@ class DBManager:
 
         try:
             session = self.__sessionMaker()
-            my_recipe = session.query(Recipe).filter(Recipe.id == recipe_id).first()
 
-            if my_recipe and my_recipe.owner == user_id:
+            my_recipe = self.get_recipe_pro(session, user_id, recipe_id)
+            if my_recipe:
                 my_recipe.public_flag = (not my_recipe.public_flag)
                 session.commit()
 
                 logging.info(f"Privacy for recipe {recipe_id} toggled.")
-
                 return my_recipe.public_flag
         except:
             logging.info(f"Esploso: toggle_privacy({user_id}, {recipe_id})")
         finally:
             session.close() 
+
 
     def get_recipe_pro(self, session, user_id: int, by_what) -> Recipe:
         """ @by_what can be either int or string """
@@ -229,7 +235,6 @@ class DBManager:
         - the recipe's id @by_id or the recipe's name @by_name.
         Returns the deleted recipe's id, None otherwise. """
    
-
         try:
             session = self.__sessionMaker()
             qresult = self.get_recipe_pro(session, user_id, 
@@ -269,6 +274,37 @@ class DBManager:
             raise 
         finally:
             session.close() 
+    
+
+    def search_recipes(self, tokens: list, user_id: int, all_recipes: bool) -> list:
+        #TODO - sort by score 
+        """ Returns the list of recipe's id matching 1+ tokens """
+        try:
+            session = self.__sessionMaker()
+            all_results = set()
+
+            logging.info(f"User {user_id} is searching in {'public' if all_recipes else 'mine'} recipes")
+            partial_query = session.query(Recipe).filter(Recipe.public_flag == True) \
+                            if all_recipes else \
+                            session.query(Recipe).filter(Recipe.owner == user_id)
+            
+            for token in tokens:
+                results = partial_query.filter(Recipe.name.like(f"%{token}%")).all()
+                all_results.update([recipe.id for recipe in results])
+                logging.info(f"Results for user {user_id} for token {token}: {results}")
+            
+            logging.info(f"All search results for user {user_id}: {all_results}")
+            return all_results
+
+        except:
+            raise 
+        finally:
+            session.close() 
+
+
+    def search_by_hashtag(self, hashtag_list: list):
+        return list()
+
 
 class FSManager:
     def __init__(self, procedure_folder: str, photo_folder: str):

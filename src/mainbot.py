@@ -37,34 +37,36 @@ if __name__ == "__main__":
     dispatcher = updater.dispatcher
 
     accepted_str = "|".join([x.value for x in op.ButtonText])
-    regex_handler = MessageHandler(Filters.regex(f"^({accepted_str})$"), op.entrypoint)
 
 
     conv_handler = ConversationHandler(
         entry_points = [
+            MessageHandler(Filters.regex(f"^({accepted_str})$"), op.entrypoint), 
             CommandHandler("start", op.start),
-            regex_handler, 
-            CommandHandler("add", op.add_recipe), 
-            CommandHandler("view", op.view_recipes)
+            CommandHandler("add", op.add_recipe),
+            CommandHandler("view", op.view_recipes),
+            CommandHandler("search", op.search_recipes_update)
         ], 
         states = {
-            op.ChatOperation.ADD_INGREDIENT: [
-                MessageHandler(Filters.text & ~Filters.command, op.add_ingredient)
-            ], 
             op.ChatOperation.INSERT_RECIPE: [
-                MessageHandler(Filters.text & ~Filters.command, op.end_recipe), 
+                MessageHandler(Filters.text & ~Filters.command, op.add_recipe),
                 MessageHandler(Filters.photo, op.add_photo)
             ],
             op.ChatOperation.VIEW_RECIPES: [
-                CallbackQueryHandler(op.get_recipe)
+                CallbackQueryHandler(op.view_recipes)
             ], 
             op.ChatOperation.PRIVACY: [
                 CallbackQueryHandler(op.set_privacy)
+            ],
+            op.ChatOperation.SEARCH_BY: [
+                MessageHandler(Filters.text & ~Filters.command, op.search_recipes_update),
+                CallbackQueryHandler(op.search_recipes_callback)
             ]
         }, 
         fallbacks = [
             CommandHandler("cancel", op.cancel), 
-            CommandHandler("help", op.helper)
+            CommandHandler("help", op.helper), 
+            MessageHandler(Filters.command, op.generic_command_entrypoint)
         ]
     )
 

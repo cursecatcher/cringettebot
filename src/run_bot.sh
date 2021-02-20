@@ -12,8 +12,6 @@ fi
 IMAGE_NAME="recipesbot" 
 
 TEST_FOLDER="${PWD}/test"
-# DB_PATHNAME="${TEST_FOLDER}/empty"
-# DB_PATHNAME="${TEST_FOLDER}/test_db"
 DB_PATHNAME="${TEST_FOLDER}/new_db"
 
 #build image
