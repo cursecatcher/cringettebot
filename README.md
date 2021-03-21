@@ -8,11 +8,11 @@ Cringette is a Telegram bot to manage personal recipes and share them between bo
 - [x] add photos to recipes
 - [x] delete its own recipes 
 - [] add nicknames to users 
-- [] visualize photos
+- [x] visualize photos
 - [] edit its own recipes
 - [] add hashtag to recipes
 - add recipe search:
-- [] by words
+- [x] by words
 - [] by hashtag
 - [] by ingredients
 - [ ] and so on... 
