@@ -347,6 +347,16 @@ class FSManager:
         
         return fcontent
 
+    def get_photos(self, recipe_obj: ent.Recipe) -> list:
+        """ Retrive all the photos associated to recipe_obj """
+        foldername = self.__foldername(recipe_obj, recipe_obj.owner, recipe_obj.id)
+        if os.path.exists(foldername):
+            return [
+                os.path.join(foldername, photoname)
+                    for photoname in os.listdir(foldername)]
+            
+        return list() 
+        
     
     def delete_procedure(self, recipe_obj: ent.Recipe = None, user_id: int = None, recipe_id: int = None):
         """ Delete the procedure file associated to the recipe passed as parameter.  """
@@ -420,7 +430,7 @@ class PersistencyManager:
     
     def get_recipe(self, user_id: int, recipe_name: str = None, recipe_id: int = None):
         #recipe_obj = self.__dbmanager.
-        pass 
+        raise NotImplementedError()
     
     def delete_recipe(self, user_id: int, recipe_name: str = None, recipe_id: int = None):
         #try to delete recipe from db 
@@ -432,4 +442,8 @@ class PersistencyManager:
             self.__fsmanager.delete_photos(user_id = user_id, recipe_id = id_rec)
 
             return True 
+    
+    def backup(self):
+        #db tables in excel file 
+        raise NotImplementedError()
         

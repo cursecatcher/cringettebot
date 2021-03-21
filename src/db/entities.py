@@ -46,6 +46,10 @@ class Recipe:
         self.__ingredients.add(Ingredient(ingredient_name))
         return self 
     
+    def add_ingredient_list(self, ingredients: list):
+        self.__ingredients.update(map(lambda name: Ingredient(name), ingredients))
+        return self 
+    
     def __repr__(self):
         return (self.name, *self.ingredients)
     
